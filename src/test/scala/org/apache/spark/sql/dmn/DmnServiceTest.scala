@@ -79,13 +79,23 @@ class DmnServiceTest extends AnyFlatSpec {
      */
 
     var dfWithStruct = f.sampleData.selectExpr("credit_score", "loan_amount")
+    val decisionTable = DmnService.getInstance().getOrCreate(dmnFile)
     var variableMap = DmnService.getInstance().structToDmnVariables(dfWithStruct.schema, InternalRow(dfWithStruct.first().toSeq: _*))
-    var evaluation = DmnService.getInstance().evaluateDecisionTable(dmnFile, variableMap)
+    var evaluation = DmnService.getInstance().evaluateDecisionTable(decisionTable, variableMap)
     assert(evaluation.getString(0) == "approved")
 
     dfWithStruct = dfWithStruct.withColumn("credit_score", expr("CAST(0.7 AS FLOAT)"))
     variableMap = DmnService.getInstance().structToDmnVariables(dfWithStruct.schema, InternalRow(dfWithStruct.first().toSeq: _*))
-    evaluation = DmnService.getInstance().evaluateDecisionTable(dmnFile, variableMap)
+    evaluation = DmnService.getInstance().evaluateDecisionTable(decisionTable, variableMap)
     assert(evaluation.getString(0)  == "declined")
+  }
+
+  it should "throw an exception if the DMN file path is null or empty" in {
+    assertThrows[IllegalArgumentException] {
+      DmnService.getInstance().getOrCreate(null)
+    }
+    assertThrows[IllegalArgumentException] {
+      DmnService.getInstance().getOrCreate("")
+    }
   }
 }

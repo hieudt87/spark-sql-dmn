@@ -42,4 +42,39 @@ class SparkSqlExtensionsTest extends AnyFlatSpec {
     spark.stop()
   }
 
+  it should "not register the function again if it is already registered" in {
+    val spark = SparkSession.builder
+      .appName("spark-sql-dmn")
+      .master("local")
+      .getOrCreate()
+
+    org.apache.spark.sql.dmn.registerAll(spark)
+    val initialCount = spark.catalog.listFunctions.filter(_.name == "evaluate_decision_table").count()
+    assert(initialCount == 1)
+
+    // Attempt to register again
+    org.apache.spark.sql.dmn.registerAll(spark)
+    val finalCount = spark.catalog.listFunctions.filter(_.name == "evaluate_decision_table").count()
+    assert(finalCount == 1)
+
+    spark.stop()
+  }
+
+  it should "handle dropping a non-existent function gracefully" in {
+    val spark = SparkSession.builder
+      .appName("spark-sql-dmn")
+      .master("local")
+      .getOrCreate()
+
+    val initialCount = spark.catalog.listFunctions.filter(_.name == "evaluate_decision_table").count()
+    assert(initialCount == 0)
+
+    // Attempt to drop the function
+    org.apache.spark.sql.dmn.dropAll(spark)
+    val finalCount = spark.catalog.listFunctions.filter(_.name == "evaluate_decision_table").count()
+    assert(finalCount == 0)
+
+    spark.stop()
+  }
+
 }

@@ -8,20 +8,25 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 
 import scala.reflect.ClassTag
 
+/**
+ * Registry for custom Spark SQL functions related to DMN evaluation.
+ */
 object FunctionRegistry {
+  /**
+   * A sequence of custom expressions to be registered as SQL functions.
+   */
   val expressions: Seq[(FunctionIdentifier, ExpressionInfo, FunctionBuilder)] = Seq(
     expression[EvaluateDecisionTable]("evaluate_decision_table")
   )
 
   /**
-   * Forked from org.apache.spark.sql.catalyst.analysis
+   * Creates a SQL function builder and corresponding `ExpressionInfo`.
    *
-   * Create a SQL function builder and corresponding `ExpressionInfo`.
    * @param name The function name.
-   * @param setAlias The alias name used in SQL representation string.
-   * @param since The Spark version since the function is added.
+   * @param setAlias Whether to set the alias name in the SQL representation string.
+   * @param since The Spark version since the function is added (optional).
    * @tparam T The actual expression class.
-   * @return (function name, (expression information, function builder))
+   * @return A tuple containing the function identifier, expression information, and function builder.
    */
   private def expression[T <: Expression : ClassTag](
                                                       name: String,
