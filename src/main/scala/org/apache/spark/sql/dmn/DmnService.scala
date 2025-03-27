@@ -2,14 +2,17 @@ package org.apache.spark.sql.dmn
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DoubleType, FloatType,
-  IntegerType, LongType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DateType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
 import org.camunda.bpm.dmn.engine.impl.{DmnDecisionTableImpl, DmnDecisionTableOutputImpl}
 import org.camunda.bpm.dmn.engine.{DmnDecision, DmnEngine, DmnEngineConfiguration}
 import org.camunda.bpm.engine.variable.{VariableMap, Variables}
+import org.apache.spark.sql.catalyst.expressions.Literal
+import com.databricks.sdk.scala.dbutils.DBUtils
 
-import java.io.FileInputStream
+import java.io.{ByteArrayInputStream, InputStream}
+import java.nio.charset.StandardCharsets
 import scala.collection.mutable
+import scala.io.Source
 
 case class DecisionTable(decisionTable: DmnDecision, outputSchema: StructType)
 
@@ -36,13 +39,21 @@ class DmnService {
     TimestampNTZType
   )
 
-  def evaluateDecisionTable(dmn: String, variables: VariableMap): GenericRowWithSchema = {
+  private val dbutils = DBUtils.getDBUtils()
+
+  def evaluateDecisionTable(dmn: String, variables: VariableMap): InternalRow = {
     val decisionTableInstance = this.getOrCreate(dmn)
     val result = this.dmnEngine.evaluateDecisionTable(decisionTableInstance.decisionTable, variables).getSingleResult
 
     if (result != null) {
-      new GenericRowWithSchema(result.values().toArray.asInstanceOf[Array[Any]],
+      val rowWithSchema = new GenericRowWithSchema(
+        result.values().toArray.asInstanceOf[Array[Any]],
         decisionTableInstance.outputSchema)
+
+      val data = Literal.create(rowWithSchema, decisionTableInstance.outputSchema)
+
+      data.value.asInstanceOf[InternalRow]
+
     } else {
       null
     }
@@ -64,10 +75,36 @@ class DmnService {
     variables
   }
 
+  private def readDmnFile(dmn: String): String = {
+    var dmnFilePath: String = null
+    var dmnFileSize: Int = -1
+    var dmnFileContent: String = null
+
+    if(dmn.startsWith("/Workspace")) {
+      dmnFilePath = f"file:$dmn"
+    } else if(dmn.startsWith("/Volumes")) {
+      dmnFilePath = f"dbfs:$dmn"
+    } else {
+      dmnFilePath = dmn
+    }
+
+    try {
+      dmnFileSize = dbutils.fs.ls(dmnFilePath).toList.head.size.toInt
+      dmnFileContent = dbutils.fs.head(dmnFilePath, dmnFileSize)
+    } catch {
+      case _: Throwable =>
+        val sourceFile = Source.fromFile(dmnFilePath)
+        dmnFileContent = sourceFile.getLines().mkString("")
+        sourceFile.close()
+    }
+
+    dmnFileContent
+  }
+
   def getOrCreate(dmn: String): DecisionTable = {
     if (!this.decisionTableInstances.contains(dmn)) {
       // Read the DMN file and build the Decision table object
-      val inputStream: FileInputStream = new FileInputStream(dmn)
+      val inputStream: InputStream = new ByteArrayInputStream(readDmnFile(dmn).getBytes(StandardCharsets.UTF_8))
       val decisionTable = dmnEngine.parseDecisions(inputStream).get(0)
       inputStream.close()
 

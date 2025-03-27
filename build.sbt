@@ -1,5 +1,5 @@
 name := "spark-sql-dmn"
-version := "1.0"
+version := "1.1"
 scalaVersion := "2.12.15"
 
 // Library dependencies
@@ -11,6 +11,7 @@ libraryDependencies ++= Seq(
   "org.scala-lang" % "scala-reflect" % scalaVersion.value,
   "org.scala-lang" % "scala-compiler" % scalaVersion.value,
   "org.scala-lang.modules" %% "scala-collection-compat" % "2.12.0",
+  "com.databricks" % "databricks-dbutils-scala_2.12" % "0.1.4",
 
 )
 

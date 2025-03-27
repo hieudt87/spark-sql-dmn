@@ -81,11 +81,11 @@ class DmnServiceTest extends AnyFlatSpec {
     var dfWithStruct = f.sampleData.selectExpr("credit_score", "loan_amount")
     var variableMap = DmnService.getInstance().structToDmnVariables(dfWithStruct.schema, InternalRow(dfWithStruct.first().toSeq: _*))
     var evaluation = DmnService.getInstance().evaluateDecisionTable(dmnFile, variableMap)
-    assert(evaluation.values(0) == "approved")
+    assert(evaluation.getString(0) == "approved")
 
     dfWithStruct = dfWithStruct.withColumn("credit_score", expr("CAST(0.7 AS FLOAT)"))
     variableMap = DmnService.getInstance().structToDmnVariables(dfWithStruct.schema, InternalRow(dfWithStruct.first().toSeq: _*))
     evaluation = DmnService.getInstance().evaluateDecisionTable(dmnFile, variableMap)
-    assert(evaluation.values(0) == "declined")
+    assert(evaluation.getString(0)  == "declined")
   }
 }
