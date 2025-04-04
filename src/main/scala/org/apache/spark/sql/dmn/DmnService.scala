@@ -1,6 +1,7 @@
 package org.apache.spark.sql.dmn
 
 import com.databricks.sdk.scala.dbutils.DBUtils
+import org.apache.log4j.Logger
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRowWithSchema, Literal}
 import org.apache.spark.sql.types._
@@ -45,6 +46,8 @@ class DmnService {
     TimestampNTZType
   )
 
+  private val logger: Logger = Logger.getLogger(this.getClass)
+
   /**
    * Evaluates a DMN decision table with the provided variables.
    * @param decisionTable The decision table to evaluate.
@@ -52,20 +55,16 @@ class DmnService {
    * @return The result as an InternalRow, or null if no result is produced.
    */
   def evaluateDecisionTable(decisionTable: DecisionTable, variables: VariableMap): InternalRow = {
-    val result = this.dmnEngine.evaluateDecisionTable(decisionTable.dmnDecision, variables).getSingleResult
-    if (result != null) {
-      val rowWithSchema = new GenericRowWithSchema(
-        result.values().toArray.asInstanceOf[Array[Any]],
-        decisionTable.outputSchema
-      )
+    val rawResults = this.dmnEngine.evaluateDecisionTable(decisionTable.dmnDecision, variables)
+    val result = rawResults.getFirstResult
+    val rowWithSchema = new GenericRowWithSchema(
+      if (result != null) result.values().toArray.asInstanceOf[Array[Any]]
+      else Array.fill(decisionTable.outputSchema.length)(null),
+      decisionTable.outputSchema
+    )
 
-      val data = Literal.create(rowWithSchema, decisionTable.outputSchema)
-
-      data.value.asInstanceOf[InternalRow]
-
-    } else {
-      null
-    }
+    val data = Literal.create(rowWithSchema, decisionTable.outputSchema)
+    data.value.asInstanceOf[InternalRow]
   }
 
   /**
@@ -86,6 +85,12 @@ class DmnService {
     val variables: VariableMap = Variables.createVariables()
     schema.zipWithIndex.foreach(field => {
       variables.put(field._1.name, data.get(field._2, field._1.dataType))
+    })
+
+    // Handle the conversion of UTF8Strings to String
+    val stringTypes = schema.fields.filter(_.dataType == StringType)
+    stringTypes.foreach(field => {
+      variables.put(field.name, variables.get(field.name).toString)
     })
 
     variables
@@ -119,7 +124,9 @@ class DmnService {
       dmnFileContent = dbutils.fs.head(dmnFilePath, dmnFileSize)
 
     } catch {
-      case _: Throwable =>
+      case e: Throwable =>
+        logger.warn("Unable to utilize dbutils, falling back to FileInputStream")
+        logger.warn(e.getMessage)
         val sourceFile = Source.fromFile(dmnFilePath)
         dmnFileContent = sourceFile.getLines().mkString("")
         sourceFile.close()
